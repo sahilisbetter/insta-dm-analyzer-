@@ -59,6 +59,9 @@ if uploaded_files:
             chat_durations[chat_name] = (messages[0]["timestamp_ms"], messages[-1]["timestamp_ms"])
 
     df = pd.DataFrame(all_msgs)
+    
+    st.write("Total messages loaded:", len(df))
+    st.dataframe(df.head())
 
     st.subheader("🔢 Message Counts")
     counts_df = pd.DataFrame(msg_counts.items(), columns=["Sender", "Messages"]).sort_values(by="Messages", ascending=False)
