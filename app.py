@@ -29,7 +29,8 @@ if uploaded_files:
             data = json.load(file)
             chat_name = data.get("title", "Unknown Chat")
             messages = data.get("messages", [])
-            messages = [m for m in messages if m.get("type") == "Generic"]
+            messages = [m for m in messages if "timestamp_ms" in m and "sender_name" in m]
+
 
             if not messages:
                 st.warning(f"No valid text messages in {file.name}")
