@@ -22,43 +22,73 @@ if uploaded_files:
     first_messages = {}
     chat_durations = {}
     reply_gaps = defaultdict(list)
+    total_skipped = 0
 
     for file in uploaded_files:
-        data = json.load(file)
-        chat_name = data.get("title", "Unknown Chat")
-        messages = data.get("messages", [])
-        messages = [m for m in messages if m.get("type") == "Generic"]
-        messages.reverse()
+        try:
+            data = json.load(file)
+            chat_name = data.get("title", "Unknown Chat")
+            messages = data.get("messages", [])
+            messages = [m for m in messages if m.get("type") == "Generic"]
 
-        last_sender = None
-        last_time = None
-        first_messages.setdefault(chat_name, f"{messages[0]['sender_name']}: {messages[0].get('content', '')}" if messages else "No messages")
+            if not messages:
+                st.warning(f"No valid text messages in {file.name}")
+                continue
 
-        for msg in messages:
-            sender = msg.get("sender_name")
-            timestamp = datetime.fromtimestamp(msg["timestamp_ms"] / 1000.0)
-            content = msg.get("content", "")
+            messages.reverse()
+            last_sender = None
+            last_time = None
+            first_messages.setdefault(chat_name, f"{messages[0]['sender_name']}: {messages[0].get('content', '')}")
 
-            all_msgs.append({"chat": chat_name, "sender": sender, "content": content, "timestamp": timestamp})
-            msg_counts[sender] += 1
-            word_counts[sender] += len(content.split())
+            for msg in messages:
+                sender = msg.get("sender_name")
+                timestamp_ms = msg.get("timestamp_ms")
+                content = msg.get("content", "")
 
-            for char in content:
-                if char in emoji.EMOJI_DATA:
-                    emoji_counts[char] += 1
+                if not sender or not timestamp_ms:
+                    total_skipped += 1
+                    continue
 
-            if last_sender and last_sender != sender and last_time:
-                gap = (timestamp - last_time).total_seconds() / 60
-                reply_times[sender].append(gap)
-                reply_gaps[chat_name].append(gap)
+                timestamp = datetime.fromtimestamp(timestamp_ms / 1000.0)
 
-            last_sender = sender
-            last_time = timestamp
+                all_msgs.append({
+                    "chat": chat_name,
+                    "sender": sender,
+                    "content": content,
+                    "timestamp": timestamp
+                })
 
-        if messages:
+                msg_counts[sender] += 1
+                word_counts[sender] += len(content.split())
+
+                for char in content:
+                    if char in emoji.EMOJI_DATA:
+                        emoji_counts[char] += 1
+
+                if last_sender and sender != last_sender and last_time:
+                    gap = (timestamp - last_time).total_seconds() / 60
+                    reply_times[sender].append(gap)
+                    reply_gaps[chat_name].append(gap)
+
+                last_sender = sender
+                last_time = timestamp
+
             chat_durations[chat_name] = (messages[0]["timestamp_ms"], messages[-1]["timestamp_ms"])
 
+        except Exception as e:
+            st.error(f"Error processing {file.name}: {e}")
+
     df = pd.DataFrame(all_msgs)
+    st.success(f"✅ Total messages loaded: {len(df)}")
+    st.write(df.head())
+
+    if total_skipped > 0:
+        st.warning(f"⚠️ Skipped {total_skipped} messages due to missing data.")
+
+    if df.empty or "timestamp" not in df.columns:
+        st.error("❌ No valid messages with timestamps found. Please upload different or additional JSON files.")
+        st.stop()
+
     
     st.write("Total messages loaded:", len(df))
     st.dataframe(df.head())
